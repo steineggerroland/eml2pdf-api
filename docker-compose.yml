@@ -1,0 +1,13 @@
+# EML-to-PDF API service for n8n (or any HTTP client).
+# Add your n8n service to the same compose file and use network eml2pdf_default
+# so n8n can call http://eml2pdf-api:8080/convert
+
+services:
+  eml2pdf-api:
+    build: .
+    container_name: eml2pdf-api
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+    restart: unless-stopped

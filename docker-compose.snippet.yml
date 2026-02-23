@@ -1,0 +1,12 @@
+# Add this service to your existing docker-compose.yml.
+# Clone this repo (e.g. to ~/eml2pdf-api). If your compose file lives in the same directory as the clone, use build: . below.
+# If your compose lives in the parent (e.g. ~/docker-compose.yml and clone is ~/eml2pdf-api), use build: ./eml2pdf-api.
+
+  eml2pdf-api:
+    build: ./eml2pdf-api
+    container_name: eml2pdf-api
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+    restart: unless-stopped
