@@ -2,6 +2,14 @@
 
 Small HTTP service that converts EML (email) files to PDF using [eml2pdf](https://pypi.org/project/eml2pdf/). Intended for use from n8n or any client that can send raw binary and receive a PDF.
 
+## Use case
+
+This API exists for workflows (e.g. with [n8n](https://n8n.io)) where you need to convert EML emails to PDF **on your own infrastructure**. There is no simple, easy-to-install converter that runs inside a typical n8n (Node.js) container—[eml2pdf](https://pypi.org/project/eml2pdf/) depends on Python and system libraries (Pango/Cairo). So this project runs as a **separate container** next to n8n: you POST raw EML bytes and get a PDF back. n8n calls the API via an HTTP Request node.
+
+**Why there is no authentication:** The service is designed to run on a **private Docker network** where only your own stack (e.g. n8n) can reach it. It is not meant to be exposed to the internet. In that setting, adding API keys or auth would add complexity without real benefit. If you ever expose the port publicly, put a reverse proxy with authentication in front of it.
+
+---
+
 ## Deploy from GitHub (e.g. on your server with n8n)
 
 1. Clone this repo next to your existing `docker-compose.yml` (e.g. both in `n8n`’s home):
