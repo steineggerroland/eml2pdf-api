@@ -7,7 +7,8 @@ import subprocess
 import tempfile
 from io import BytesIO
 from pathlib import Path
-
+import signal
+import sys
 from flask import Flask, request, send_file, jsonify
 
 app = Flask(__name__)
@@ -89,6 +90,11 @@ def convert():
             download_name=pdf_path.name,
         )
 
+def _handle_sigterm(signum, frame):
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, _handle_sigterm)
+signal.signal(signal.SIGINT, _handle_sigterm)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8080"))
