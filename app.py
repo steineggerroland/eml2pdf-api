@@ -2,6 +2,7 @@
 Minimal HTTP API: POST raw EML bytes to /convert, get PDF back.
 Query params: page (default "a4"), debug_html, unsafe (optional).
 """
+import time
 import os
 import subprocess
 import tempfile
@@ -10,6 +11,7 @@ from pathlib import Path
 import signal
 import sys
 from flask import Flask, request, send_file, jsonify
+import json
 
 app = Flask(__name__)
 
@@ -17,11 +19,10 @@ app = Flask(__name__)
 MAX_CONTENT_LENGTH = 50 * 1024 * 1024
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
-
 @app.route("/health", methods=["GET"])
 def health():
     """Liveness/readiness."""
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "healthy"})
 
 
 @app.route("/convert", methods=["POST"])
@@ -50,18 +51,16 @@ def convert():
 
         eml_path = input_dir / "message.eml"
         eml_path.write_bytes(raw)
+        # eml2pdf 2.x requires a subcommand (convert_dir or convert_file); the old
+        # flat CLI (eml2pdf -n 1 in out) made "1" look like a subcommand name.
+        pdf_out = output_dir / "mail.pdf"
 
-        cmd = [
-            "eml2pdf",
-            "-n", "1",
-            "-p", page,
-            input_dir,
-            output_dir,
-        ]
+        cmd = ["eml2pdf", "convert_file"]
         if debug_html:
-            cmd.insert(1, "-d")
+            cmd.append("-d")
         if unsafe:
             cmd.append("--unsafe")
+        cmd.extend(["-p", page, str(eml_path), str(pdf_out)])
 
         result = subprocess.run(
             cmd,
@@ -76,19 +75,45 @@ def convert():
                 "stderr": result.stderr or result.stdout,
             }), 500
 
-        pdfs = list(output_dir.glob("*.pdf"))
-        if not pdfs:
+        if not pdf_out.is_file():
             return jsonify({"error": "eml2pdf produced no PDF"}), 500
 
-        # Single input file => single output PDF from this request; serve from memory so temp dir can be cleaned
-        pdf_path = pdfs[0]
-        pdf_bytes = BytesIO(pdf_path.read_bytes())
+        pdf_bytes = BytesIO(pdf_out.read_bytes())
         return send_file(
             pdf_bytes,
             mimetype="application/pdf",
             as_attachment=False,
-            download_name=pdf_path.name,
+            download_name="mail.pdf",
         )
+
+@app.before_request
+def start_timer():
+    request.start_time = time.time()
+
+@app.after_request
+def log_request(response):
+    elapsed = time.time() - request.start_time
+    elapsed_ms = elapsed * 1000
+    app.logger.info(
+        f"Request: {request.method} {request.path} | "
+        f"Status: {response.status_code} | "
+        f"Time: {elapsed_ms:.2f}ms"
+    )
+ 
+    return response
+
+@app.teardown_request
+def log_exception(exception):
+    if exception:  # Only log if an exception occurred
+        elapsed = time.time() - request.start_time
+        elapsed_ms = elapsed * 1000
+        app.logger.info(
+            f"Request failed: {request.method} {request.path} | "
+            f"Exception: {str(exception)} | "
+            f"Time: {elapsed_ms:.2f}ms"
+        )
+        app.logger.info(json.dumps(dict(request.headers)))
+
 
 def _handle_sigterm(signum, frame):
     sys.exit(0)
@@ -98,4 +123,4 @@ signal.signal(signal.SIGINT, _handle_sigterm)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8080"))
-    app.run(host="0.0.0.0", port=port)
+    app.run(debug=True,host="0.0.0.0", port=port)
